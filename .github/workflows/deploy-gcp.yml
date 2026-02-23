@@ -1,0 +1,61 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  BACKEND_SERVICE: event-backend
+  FRONTEND_SERVICE: event-frontend
+  IMAGE_REGISTRY: gcr.io/${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+    - name: Configure Docker for Google Container Registry
+      run: gcloud auth configure-docker
+
+    - name: Build and Push Backend Image
+      run: |
+        docker build -t $IMAGE_REGISTRY/$BACKEND_SERVICE:${{ github.sha }} ./backend
+        docker push $IMAGE_REGISTRY/$BACKEND_SERVICE:${{ github.sha }}
+
+    - name: Build and Push Frontend Image
+      run: |
+        docker build -t $IMAGE_REGISTRY/$FRONTEND_SERVICE:${{ github.sha }} ./frontend
+        docker push $IMAGE_REGISTRY/$FRONTEND_SERVICE:${{ github.sha }}
+
+    - name: Deploy Backend to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v1
+      with:
+        service: ${{ env.BACKEND_SERVICE }}
+        image: ${{ env.IMAGE_REGISTRY }}/${{ env.BACKEND_SERVICE }}:${{ github.sha }}
+        region: ${{ env.REGION }}
+        env_vars: |
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+
+    - name: Deploy Frontend to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v1
+      with:
+        service: ${{ env.FRONTEND_SERVICE }}
+        image: ${{ env.IMAGE_REGISTRY }}/${{ env.FRONTEND_SERVICE }}:${{ github.sha }}
+        region: ${{ env.REGION }}
+        env_vars: |
+          NEXT_PUBLIC_API_URL=${{ steps.deploy-backend.outputs.url }}/api

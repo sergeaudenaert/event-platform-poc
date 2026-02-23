@@ -1,0 +1,63 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  REGISTRY_NAME: ${{ secrets.AZURE_REGISTRY_NAME }}
+  RESOURCE_GROUP: event-platform-rg
+  CONTAINER_APP_ENV: event-app-env
+  BACKEND_APP: event-backend
+  FRONTEND_APP: event-frontend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Login to ACR
+      run: az acr login --name ${{ env.REGISTRY_NAME }}
+
+    - name: Build and push Backend Image
+      run: |
+        docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_APP }}:${{ github.sha }} ./backend
+        docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_APP }}:${{ github.sha }}
+
+    - name: Build and push Frontend Image
+      run: |
+        docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_APP }}:${{ github.sha }} ./frontend
+        docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_APP }}:${{ github.sha }}
+
+    - name: Deploy Backend to Azure Container Apps
+      uses: azure/container-apps-deploy-action@v1
+      with:
+        resourceGroup: ${{ env.RESOURCE_GROUP }}
+        containerAppName: ${{ env.BACKEND_APP }}
+        environment: ${{ env.CONTAINER_APP_ENV }}
+        imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_APP }}:${{ github.sha }}
+        targetPort: 4000
+        environmentVariables: |
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+
+    - name: Deploy Frontend to Azure Container Apps
+      uses: azure/container-apps-deploy-action@v1
+      with:
+        resourceGroup: ${{ env.RESOURCE_GROUP }}
+        containerAppName: ${{ env.FRONTEND_APP }}
+        environment: ${{ env.CONTAINER_APP_ENV }}
+        imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_APP }}:${{ github.sha }}
+        targetPort: 3000
+        # Wait, usually backend URL should be injected here, but for Azure Container Apps we might need manual updating or complex action outputs.
+        environmentVariables: |
+          NEXT_PUBLIC_API_URL=https://${{ env.BACKEND_APP }}.${{ secrets.AZURE_APP_DOMAIN }}/api
