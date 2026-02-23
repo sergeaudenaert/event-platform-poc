@@ -36,12 +36,8 @@ jobs:
         docker build -t $IMAGE_REGISTRY/$BACKEND_SERVICE:${{ github.sha }} ./backend
         docker push $IMAGE_REGISTRY/$BACKEND_SERVICE:${{ github.sha }}
 
-    - name: Build and Push Frontend Image
-      run: |
-        docker build -t $IMAGE_REGISTRY/$FRONTEND_SERVICE:${{ github.sha }} ./frontend
-        docker push $IMAGE_REGISTRY/$FRONTEND_SERVICE:${{ github.sha }}
-
     - name: Deploy Backend to Cloud Run
+      id: deploy-backend
       uses: google-github-actions/deploy-cloudrun@v1
       with:
         service: ${{ env.BACKEND_SERVICE }}
@@ -50,6 +46,13 @@ jobs:
         env_vars: |
           DATABASE_URL=${{ secrets.DATABASE_URL }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
+
+    - name: Build and Push Frontend Image
+      run: |
+        docker build \
+          --build-arg NEXT_PUBLIC_API_URL=${{ steps.deploy-backend.outputs.url }}/api \
+          -t $IMAGE_REGISTRY/$FRONTEND_SERVICE:${{ github.sha }} ./frontend
+        docker push $IMAGE_REGISTRY/$FRONTEND_SERVICE:${{ github.sha }}
 
     - name: Deploy Frontend to Cloud Run
       uses: google-github-actions/deploy-cloudrun@v1

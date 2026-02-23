@@ -20,6 +20,8 @@ The easiest way to run the entire stack locally is utilizing Docker Compose.
 ## 2. CI/CD - Google Cloud Run
 A GitHub Actions workflow is provided at `.github/workflows/deploy-gcp.yml`.
 
+> 🚀 **For a full, step-by-step walkthrough from setting up your initial Google Cloud account to triggering the final deployment pipeline, please see: [docs/gcp-deployment-guide.md](./gcp-deployment-guide.md)**.
+
 ### Secrets Required in GitHub Repository
 - `GCP_PROJECT_ID`: Your Google Cloud Project ID.
 - `GCP_CREDENTIALS`: A service account JSON key with Cloud Run Admin, Service Account User, and Storage Admin (for Container Registry) roles.
