@@ -81,3 +81,27 @@ Explicitly cast parameters to strings before usage when building the routes:
 const id = req.params.id as string;
 const eventId = req.query.eventId as string;
 ```
+
+---
+
+## 6. Next.js: Build-Time Environment Variable Injection
+**The Mistake:** 
+Assuming `NEXT_PUBLIC_API_URL` could be supplied to the Next.js Docker container at *runtime* using Cloud Run environment variables.
+
+**The Problem:** 
+Unlike traditional Node.js servers that read `process.env` on every request, Next.js "bakes" any environment variable prefixed with `NEXT_PUBLIC_` directly into the static HTML and JavaScript bundles during the `npm run build` process. If the variable isn't present when the container is built inside GitHub Actions, the client components receive `undefined`, breaking CORS and API calls on the live site.
+
+**The Fix:** 
+Reorder the CI/CD pipeline. Deploy the backend *first*, capture its generated `.a.run.app` URL, and pass that URL into the frontend's `docker build` command as a `--build-arg`. In the Dockerfile, declare `ARG NEXT_PUBLIC_API_URL` and `ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}` directly before the `RUN npm run build` step so the static compiler can read it.
+
+---
+
+## 7. Prisma ORM: Production Database Initialization (Cloud SQL)
+**The Mistake:** 
+Providing a valid `DATABASE_URL` to the production backend container, but forgetting to explicitly instruct the container to construct the Prisma schema tables on the remote database.
+
+**The Problem:** 
+Unlike the local `docker-compose` setup which runs initialization scripts on startup, the production Cloud SQL database starts completely empty. When the Express app attempts to query the `User` or `Event` tables, it crashes with a catastrophic 500 Internal Server error because the tables do not exist.
+
+**The Fix:** 
+Inject a dedicated, secure database initialization step directly into the GitHub Actions pipeline. After the backend container image is built, use a temporary runner to inject the production `DATABASE_URL` Secret and run `npx prisma db push && npm run seed` natively against the Google Cloud SQL instance before deploying the container to Cloud Run.
