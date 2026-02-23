@@ -36,6 +36,10 @@ jobs:
         docker build -t $IMAGE_REGISTRY/$BACKEND_SERVICE:${{ github.sha }} ./backend
         docker push $IMAGE_REGISTRY/$BACKEND_SERVICE:${{ github.sha }}
 
+    - name: Initialize Production Database
+      run: |
+        docker run --rm -e DATABASE_URL="${{ secrets.DATABASE_URL }}" $IMAGE_REGISTRY/$BACKEND_SERVICE:${{ github.sha }} sh -c "npx prisma db push && npm run seed"
+
     - name: Deploy Backend to Cloud Run
       id: deploy-backend
       uses: google-github-actions/deploy-cloudrun@v1
